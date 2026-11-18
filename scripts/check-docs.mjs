@@ -30,11 +30,12 @@ function walk(dir, out = [], depth = 0) {
 }
 
 // Required fields must be plain or quoted single-line strings. YAML tags
-// (!!str), anchors (&a), aliases (*a) and block scalars (| >) are rejected
+// (!!str), anchors (&a), aliases (*a), block scalars (| >) and flow
+// collections ([ {) are rejected
 // rather than half-parsed, as are unterminated quotes and repeated keys. Returns { value } or { unsupported: true }.
 export function scalarValue(raw) {
   const text = raw.trim();
-  if (/^[!&*|>]/.test(text)) return { unsupported: true };
+  if (/^[!&*|>\[{]/.test(text)) return { unsupported: true };
   const quoted = text.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*(?:#.*)?$/);
   if (quoted) return { value: quoted[1].slice(1, -1).trim() };
   // An opening quote without a matching close (or a multi-line quoted value).
@@ -58,7 +59,7 @@ export function parseFrontmatter(text) {
     if (line.trim() === "" || /^\s/.test(line) || /^#/.test(line) || /^-(\s|$)/.test(line)) continue;
     // Only plain identifier keys are supported at the top level; quoted,
     // escaped, tagged or flow-style keys are rejected rather than parsed.
-    const kv = line.match(/^([A-Za-z_][\w-]*)\s*:(?:\s+(.*)|$)/);
+    const kv = line.match(/^([A-Za-z_][\w-]*):(?:[ \t]+(.*)|$)/);
     if (!kv) {
       unsupportedLines.push(line);
       continue;

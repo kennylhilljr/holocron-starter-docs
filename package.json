@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "cli dev",
     "check": "node scripts/check-docs.mjs",
-    "build": "npm run check"
+    "build": "npm run check",
+    "test": "node --test"
   },
   "dependencies": {
     "@holocron.so/cli": "^0.5.0"

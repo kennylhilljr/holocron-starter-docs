@@ -23,7 +23,7 @@ This repository holds documentation and content for Holocron starter docs. The w
    - Update examples: prefer editing the example YAML blocks in `rules.mdx` to keep real examples consistent with UI/schema.
 
 5. Build / test / lint notes
-   - The only scripts are `npm run check` (offline docs validation: frontmatter `title`/`description`/`icon` and `meta.json` pages), `npm run build` (runs `check`; this is what CI runs) and `npm run dev`. There are no lint or test scripts.
+   - The only scripts are `npm run check` (offline docs validation: frontmatter `title`/`description`/`icon` and `meta.json` pages), `npm run build` (runs `check`; CI runs it), `npm test` (tests for the check script) and `npm run dev`. There is no lint script.
    - Run `npm run check` before committing doc changes. If you change dependencies, commit the updated root `package-lock.json`.
 
 6. Integration and boundaries

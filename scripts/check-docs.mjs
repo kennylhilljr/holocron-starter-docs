@@ -10,14 +10,18 @@ import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, dirname, resolve, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const IGNORED_DIRS = new Set(["node_modules", "dist", "build", "out"]);
+// node_modules is skipped at any depth. Build output and hidden dirs
+// (.git, .github, .cache, ...) are skipped only at the repository root, so
+// content in nested folders such as guides/build/ is still checked.
+const ROOT_IGNORED_DIRS = new Set(["dist", "build", "out"]);
 const REQUIRED_FIELDS = ["title", "description", "icon"];
 
-function walk(dir, out = []) {
+function walk(dir, out = [], depth = 0) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      // Skip dependencies, build output and hidden dirs (.git, .cache, .github, ...).
-      if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith(".")) walk(join(dir, entry.name), out);
+      if (entry.name === "node_modules") continue;
+      if (depth === 0 && (ROOT_IGNORED_DIRS.has(entry.name) || entry.name.startsWith("."))) continue;
+      walk(join(dir, entry.name), out, depth + 1);
     } else if (entry.isFile()) {
       out.push(join(dir, entry.name));
     }
@@ -25,39 +29,29 @@ function walk(dir, out = []) {
   return out;
 }
 
-// Reduce a single-line YAML scalar to its string value. Returns "" for empty,
-// null, "~", tag-only or comment-only values so they fail the required check.
+// Required fields must be plain or quoted single-line strings. YAML tags
+// (!!str), anchors (&a), aliases (*a) and block scalars (| >) are rejected
+// rather than half-parsed. Returns { value } or { unsupported: true }.
 export function scalarValue(raw) {
-  let text = raw.trim().replace(/^!!?[\w/:.-]*(?:\s+|$)/, "");
-  const isNullTag = /^!!null\b/.test(raw.trim());
+  const text = raw.trim();
+  if (/^[!&*|>]/.test(text)) return { unsupported: true };
   const quoted = text.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*(?:#.*)?$/);
-  if (quoted) return isNullTag ? "" : quoted[1].slice(1, -1).trim();
-  text = text.replace(/(^|\s)#.*$/, "").trim();
-  if (isNullTag || text === "~" || /^null$/i.test(text)) return "";
-  return text;
+  if (quoted) return { value: quoted[1].slice(1, -1).trim() };
+  const value = text.replace(/(^|\s)#.*$/, "").trim();
+  if (value === "~" || /^null$/i.test(value)) return { value: "" };
+  return { value };
 }
 
 export function parseFrontmatter(text) {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   if (lines[0] !== "---") return null;
   const end = lines.indexOf("---", 1);
   if (end === -1) return null;
   const body = lines.slice(1, end);
   const fields = {};
-  for (let i = 0; i < body.length; i++) {
-    const kv = body[i].match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-    if (!kv) continue;
-    const head = kv[2].replace(/(^|\s)#.*$/, "").trim();
-    if (/^[|>][-+0-9]*$/.test(head)) {
-      // Block scalar: value is the following indented lines.
-      const block = [];
-      while (i + 1 < body.length && (/^\s+\S/.test(body[i + 1]) || body[i + 1].trim() === "")) {
-        block.push(body[++i].trim());
-      }
-      fields[kv[1]] = block.join(" ").trim();
-    } else {
-      fields[kv[1]] = scalarValue(kv[2]);
-    }
+  for (const line of body) {
+    const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    if (kv) fields[kv[1]] = scalarValue(kv[2]);
   }
   return fields;
 }
@@ -80,7 +74,11 @@ export function checkDocs(rootDir) {
       continue;
     }
     for (const field of REQUIRED_FIELDS) {
-      if (!fm[field]) errors.push(`${rel(file)}: missing frontmatter field ${field}`);
+      if (fm[field]?.unsupported) {
+        errors.push(`${rel(file)}: frontmatter field ${field} must be a plain or quoted single-line string`);
+      } else if (!fm[field]?.value) {
+        errors.push(`${rel(file)}: missing frontmatter field ${field}`);
+      }
     }
   }
 
@@ -105,6 +103,10 @@ export function checkDocs(rootDir) {
       }
       if (isSkippedPageEntry(page)) continue;
       const name = page.replace(/^!/, "");
+      if (!/^[\w][\w.-]*$/.test(name) || /^\.+$/.test(name)) {
+        errors.push(`${rel(file)}: invalid pages entry ${JSON.stringify(page)} (expected a page or folder name)`);
+        continue;
+      }
       const folder = join(dir, name);
       const ok =
         (existsSync(`${folder}.mdx`) && statSync(`${folder}.mdx`).isFile()) ||

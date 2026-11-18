@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Generated build output
+dist/
+build/
+.holocron/
+.next/
+out/
+
+# Logs
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

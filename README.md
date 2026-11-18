@@ -22,7 +22,7 @@ npm ci
 | --- | --- |
 | `npm run check` | Offline validation of the docs. Every `.mdx` file needs frontmatter with `title`, `description` and `icon`, and every page in a `meta.json` `pages` array needs a matching `.mdx` file (or folder). |
 | `npm run build` | Runs `npm run check`. The Holocron CLI has no local build, so this is the build CI runs. |
-| `npm run dev` | Runs `cli dev` from `@holocron.so/cli`. It reads `siteId` from `holocron.jsonc` and syncs files to holocron.so, so it needs network access and a Holocron login. |
+| `npm run dev` | Runs `cli dev` from `@holocron.so/cli`. It reads `siteId` from `holocron.jsonc` and syncs files to holocron.so, so it needs network access. |
 
 ## CI
 

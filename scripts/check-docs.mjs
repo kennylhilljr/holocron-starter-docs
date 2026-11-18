@@ -28,6 +28,17 @@ function walk(dir, out = []) {
   return out;
 }
 
+// Reduce a YAML scalar to its string value. Returns "" for empty, null,
+// "~" or comment-only values so they fail the required-field check.
+function scalarValue(raw) {
+  const text = raw.trim();
+  const quoted = text.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*(?:#.*)?$/);
+  if (quoted) return quoted[1].slice(1, -1).trim();
+  const value = text.replace(/(^|\s)#.*$/, "").trim();
+  if (value === "~" || /^null$/i.test(value)) return "";
+  return value;
+}
+
 function parseFrontmatter(text) {
   const match = text.replace(/^﻿/, "").match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return null;
@@ -35,9 +46,7 @@ function parseFrontmatter(text) {
   for (const line of match[1].split(/\r?\n/)) {
     const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
     if (!kv) continue;
-    let value = kv[2].trim();
-    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1).trim();
-    fields[kv[1]] = value;
+    fields[kv[1]] = scalarValue(kv[2]);
   }
   return fields;
 }

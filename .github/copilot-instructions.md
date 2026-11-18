@@ -5,7 +5,7 @@ This repository holds documentation and content for Holocron starter docs. The w
 
 1. Quick start (developer session)
    - Use Node 22 / npm 10 (see `.nvmrc` and `engines` in `package.json`). Install deps at repo root with `npm ci`; `node_modules/` is not committed.
-   - `npm run dev` runs `cli dev` from `@holocron.so/cli`, which syncs files to the holocron.so site in `holocron.jsonc` (needs network and a Holocron login).
+   - `npm run dev` runs `cli dev` from `@holocron.so/cli`, which syncs files to the holocron.so site in `holocron.jsonc` (needs network access).
    - `npm run check` validates the docs offline and is safe to run at any time.
 
 2. Where to look for the most important content

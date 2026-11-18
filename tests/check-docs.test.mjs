@@ -58,7 +58,7 @@ for (const value of ["null", "~", "# TODO", '"" # TODO', "''", '"  "']) {
   });
 }
 
-for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n", '"Hello', "'Hello", '"multi\n  line"', "Bad\ntitle: Good", "&a Bad\ntitle: Good", "&a Bad\n\"title\": Good", "&a Bad\n'title': Good"]) {
+for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n", '"Hello', "'Hello", '"multi\n  line"', "Bad\ntitle: Good", "&a Bad\ntitle: Good"]) {
   test(`unsupported YAML title ${JSON.stringify(value)} is rejected`, () => {
     const dir = fixture({ "a.mdx": page(value) });
     assert.match(checkDocs(dir).errors.join("\n"), /field title must be a plain or quoted/);
@@ -66,14 +66,14 @@ for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str
 }
 
 test("unparseable top-level frontmatter lines are rejected", () => {
-  for (const extra of ["? title\n", "[a, b]\n", "title:Bad\n"]) {
+  for (const extra of ["? title\n", "[a, b]\n", "title:Bad\n", '"title": B\n', "'title': B\n", '"ti\\u0074le": B\n', "!!str title: B\n", '" title ": B\n', "orphan # comment: Stuff\n", "[a, b: Stuff\n", "og:image: x\n"]) {
     const dir = fixture({ "a.mdx": page("'T'", extra) });
     assert.match(checkDocs(dir).errors.join("\n"), /unsupported frontmatter line|field title must be/, extra);
   }
 });
 
 test("nested and list frontmatter is allowed", () => {
-  const dir = fixture({ "a.mdx": page("'T'", "tags:\n  - a\n  - b\n# comment\nog:image: x\n\"quoted key\": y\n") });
+  const dir = fixture({ "a.mdx": page("'T'", "tags:\n  - a\n  - b\n# comment\nsidebar_label: x\nnested:\n  key: y\n") });
   assert.deepEqual(checkDocs(dir).errors, []);
 });
 

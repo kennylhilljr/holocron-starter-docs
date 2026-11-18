@@ -20,7 +20,7 @@ npm ci
 
 | Command | What it does |
 | --- | --- |
-| `npm run check` | Offline validation of the docs. Every `.mdx` file needs frontmatter with `title`, `description` and `icon`, and every page in a `meta.json` `pages` array needs a matching `.mdx` file (or folder). |
+| `npm run check` | Offline validation of the docs. Every `.mdx` file needs frontmatter with `title`, `description` and `icon`, and every page in a `meta.json` `pages` array needs a matching `.mdx` file (or folder). Top-level frontmatter keys must be plain names, and the required values must be plain or quoted single-line strings (YAML tags, anchors and block scalars are rejected). |
 | `npm run build` | Runs `npm run check`. The Holocron CLI has no local build, so this is the build CI runs. |
 | `npm test` | Runs the `node:test` suite for the docs check (`tests/`). |
 | `npm run dev` | Runs `cli dev` from `@holocron.so/cli`. It reads `siteId` from `holocron.jsonc` and syncs files to holocron.so, so it needs network access. |

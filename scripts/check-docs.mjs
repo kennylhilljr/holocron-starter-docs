@@ -56,14 +56,16 @@ export function parseFrontmatter(text) {
     // Blank lines, comments, indented continuation and list items are left to
     // YAML; only top-level "key: value" lines carry the required fields.
     if (line.trim() === "" || /^\s/.test(line) || /^#/.test(line) || /^-(\s|$)/.test(line)) continue;
-    const kv = line.match(/^(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|((?:[^\s"'#?:]|:(?=\S))(?:[^:]|:(?=\S))*?))\s*:(?:\s+(.*)|$)/);
+    // Only plain identifier keys are supported at the top level; quoted,
+    // escaped, tagged or flow-style keys are rejected rather than parsed.
+    const kv = line.match(/^([A-Za-z_][\w-]*)\s*:(?:\s+(.*)|$)/);
     if (!kv) {
       unsupportedLines.push(line);
       continue;
     }
-    const key = (kv[1] ?? kv[2]?.replace(/''/g, "'") ?? kv[3]).trim();
-    // A repeated key (quoted or not) must not let a later value hide an earlier one.
-    fields[key] = key in fields ? { unsupported: true } : scalarValue(kv[4] ?? "");
+    const key = kv[1];
+    // A repeated key must not let a later value hide an earlier one.
+    fields[key] = key in fields ? { unsupported: true } : scalarValue(kv[2] ?? "");
   }
   Object.defineProperty(fields, "unsupportedLines", { value: unsupportedLines });
   return fields;

@@ -51,12 +51,21 @@ export function parseFrontmatter(text) {
   if (end === -1) return null;
   const body = lines.slice(1, end);
   const fields = {};
+  const unsupportedLines = [];
   for (const line of body) {
-    const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-    if (!kv) continue;
-    // A repeated key must not let a later value hide an earlier one.
-    fields[kv[1]] = kv[1] in fields ? { unsupported: true } : scalarValue(kv[2]);
+    // Blank lines, comments, indented continuation and list items are left to
+    // YAML; only top-level "key: value" lines carry the required fields.
+    if (line.trim() === "" || /^\s/.test(line) || /^#/.test(line) || /^-(\s|$)/.test(line)) continue;
+    const kv = line.match(/^(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|((?:[^\s"'#?:]|:(?=\S))(?:[^:]|:(?=\S))*?))\s*:(?:\s+(.*)|$)/);
+    if (!kv) {
+      unsupportedLines.push(line);
+      continue;
+    }
+    const key = (kv[1] ?? kv[2]?.replace(/''/g, "'") ?? kv[3]).trim();
+    // A repeated key (quoted or not) must not let a later value hide an earlier one.
+    fields[key] = key in fields ? { unsupported: true } : scalarValue(kv[4] ?? "");
   }
+  Object.defineProperty(fields, "unsupportedLines", { value: unsupportedLines });
   return fields;
 }
 
@@ -76,6 +85,9 @@ export function checkDocs(rootDir) {
     if (!fm) {
       errors.push(`${rel(file)}: missing frontmatter`);
       continue;
+    }
+    for (const line of fm.unsupportedLines) {
+      errors.push(`${rel(file)}: unsupported frontmatter line ${JSON.stringify(line)}`);
     }
     for (const field of REQUIRED_FIELDS) {
       if (fm[field]?.unsupported) {

@@ -58,12 +58,24 @@ for (const value of ["null", "~", "# TODO", '"" # TODO', "''", '"  "']) {
   });
 }
 
-for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n", '"Hello', "'Hello", '"multi\n  line"', "Bad\ntitle: Good", "&a Bad\ntitle: Good"]) {
+for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n", '"Hello', "'Hello", '"multi\n  line"', "Bad\ntitle: Good", "&a Bad\ntitle: Good", "&a Bad\n\"title\": Good", "&a Bad\n'title': Good"]) {
   test(`unsupported YAML title ${JSON.stringify(value)} is rejected`, () => {
     const dir = fixture({ "a.mdx": page(value) });
     assert.match(checkDocs(dir).errors.join("\n"), /field title must be a plain or quoted/);
   });
 }
+
+test("unparseable top-level frontmatter lines are rejected", () => {
+  for (const extra of ["? title\n", "[a, b]\n", "title:Bad\n"]) {
+    const dir = fixture({ "a.mdx": page("'T'", extra) });
+    assert.match(checkDocs(dir).errors.join("\n"), /unsupported frontmatter line|field title must be/, extra);
+  }
+});
+
+test("nested and list frontmatter is allowed", () => {
+  const dir = fixture({ "a.mdx": page("'T'", "tags:\n  - a\n  - b\n# comment\nog:image: x\n\"quoted key\": y\n") });
+  assert.deepEqual(checkDocs(dir).errors, []);
+});
 
 test("real values pass", () => {
   assert.deepEqual(scalarValue(`"Rules" # ok`), { value: "Rules" });
@@ -116,7 +128,10 @@ test("CLI exits 1 on broken docs and 0 on valid docs", () => {
   assert.equal(spawnSync(process.execPath, [script, valid]).status, 0);
 });
 
-test(".gitignore ignores build output only at the root", () => {
+const hasGitWorktree =
+  spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: repoRoot }).stdout?.toString().trim() === "true";
+
+test(".gitignore ignores build output only at the root", { skip: !hasGitWorktree && "needs git and a git checkout" }, () => {
   const ignored = (p) => spawnSync("git", ["check-ignore", "-q", p], { cwd: repoRoot }).status === 0;
   for (const p of ["node_modules/x/i.js", "docs/node_modules/x", ".DS_Store", "docs/.DS_Store", "build/x", "dist/x", "out/x", ".cache/x"]) {
     assert.ok(ignored(p), `${p} should be ignored`);

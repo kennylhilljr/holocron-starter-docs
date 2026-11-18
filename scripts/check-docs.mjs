@@ -31,12 +31,14 @@ function walk(dir, out = [], depth = 0) {
 
 // Required fields must be plain or quoted single-line strings. YAML tags
 // (!!str), anchors (&a), aliases (*a) and block scalars (| >) are rejected
-// rather than half-parsed. Returns { value } or { unsupported: true }.
+// rather than half-parsed, as are unterminated quotes and repeated keys. Returns { value } or { unsupported: true }.
 export function scalarValue(raw) {
   const text = raw.trim();
   if (/^[!&*|>]/.test(text)) return { unsupported: true };
   const quoted = text.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*(?:#.*)?$/);
   if (quoted) return { value: quoted[1].slice(1, -1).trim() };
+  // An opening quote without a matching close (or a multi-line quoted value).
+  if (/^["']/.test(text)) return { unsupported: true };
   const value = text.replace(/(^|\s)#.*$/, "").trim();
   if (value === "~" || /^null$/i.test(value)) return { value: "" };
   return { value };
@@ -51,7 +53,9 @@ export function parseFrontmatter(text) {
   const fields = {};
   for (const line of body) {
     const kv = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-    if (kv) fields[kv[1]] = scalarValue(kv[2]);
+    if (!kv) continue;
+    // A repeated key must not let a later value hide an earlier one.
+    fields[kv[1]] = kv[1] in fields ? { unsupported: true } : scalarValue(kv[2]);
   }
   return fields;
 }

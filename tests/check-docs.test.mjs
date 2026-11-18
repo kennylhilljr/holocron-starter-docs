@@ -58,7 +58,7 @@ for (const value of ["null", "~", "# TODO", '"" # TODO', "''", '"  "']) {
   });
 }
 
-for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n"]) {
+for (const value of ["!!null", "!!str null", "!<tag:yaml.org,2002:null>", "!!str |", "&a", "&a Title", "*a", "|", ">-", "|\n  Block title\n", '"Hello', "'Hello", '"multi\n  line"', "Bad\ntitle: Good", "&a Bad\ntitle: Good"]) {
   test(`unsupported YAML title ${JSON.stringify(value)} is rejected`, () => {
     const dir = fixture({ "a.mdx": page(value) });
     assert.match(checkDocs(dir).errors.join("\n"), /field title must be a plain or quoted/);
@@ -114,4 +114,14 @@ test("CLI exits 1 on broken docs and 0 on valid docs", () => {
   const valid = fixture({ "a.mdx": page() });
   assert.equal(spawnSync(process.execPath, [script, broken]).status, 1);
   assert.equal(spawnSync(process.execPath, [script, valid]).status, 0);
+});
+
+test(".gitignore ignores build output only at the root", () => {
+  const ignored = (p) => spawnSync("git", ["check-ignore", "-q", p], { cwd: repoRoot }).status === 0;
+  for (const p of ["node_modules/x/i.js", "docs/node_modules/x", ".DS_Store", "docs/.DS_Store", "build/x", "dist/x", "out/x", ".cache/x"]) {
+    assert.ok(ignored(p), `${p} should be ignored`);
+  }
+  for (const p of ["guides/build/p.mdx", "guides/dist/p.mdx", "guides/out/p.mdx"]) {
+    assert.ok(!ignored(p), `${p} should not be ignored`);
+  }
 });

@@ -162,12 +162,19 @@ export function extractLinks(text) {
   let prose = body;
   for (let prev; prev !== prose; ) {
     prev = prose;
-    prose = prose.replace(/\{[^{}]*\}/g, blank);
+    // Same-length blanking keeps indices aligned with body for line numbers.
+    prose = prose.replace(/\{[^{}]*\}/g, (m) => m.replace(/[^\n]/g, " "));
   }
-  for (const m of prose.matchAll(REF_USE)) {
-    const label = normLabel(m[2] || m[1]);
-    if (label && !defined.has(label)) links.push({ undefinedRef: label, index: m.index, line: lineOf(m.index) });
-  }
+  // Scan labels recursively, e.g. a reference badge inside a reference link.
+  const scanRefs = (text, offset) => {
+    for (const m of text.matchAll(REF_USE)) {
+      const label = normLabel(m[2] || m[1]);
+      const index = offset + m.index;
+      if (label && !defined.has(label)) links.push({ undefinedRef: label, index, line: lineOf(index) });
+      scanRefs(m[1], index + m[0].indexOf("[") + 1);
+    }
+  };
+  scanRefs(prose, 0);
   for (const m of body.matchAll(JSX_ATTR)) add(m[1] ?? m[2] ?? m[3] ?? m[4], m.index);
   return links.sort((a, b) => a.index - b.index);
 }

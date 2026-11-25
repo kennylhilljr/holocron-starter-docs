@@ -229,6 +229,13 @@ test("MDX expressions and footnotes are not links; nested and wrapped labels are
   ]);
 });
 
+test("references nested in reference labels are checked", () => {
+  const dir = fixture({
+    "a.mdx": page() + "{x}\n{\n  y\n}\n[![CI][missing]][project]\n\n[project]: /a\n",
+  });
+  assert.deepEqual(checkDocs(dir).errors, ['a.mdx:12: undefined link reference "missing"']);
+});
+
 test("links escaping the repository are reported", () => {
   const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
   assert.match(checkDocs(dir).errors.join("\n"), /broken link/);

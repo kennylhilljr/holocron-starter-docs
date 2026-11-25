@@ -27,8 +27,8 @@ This repository holds documentation and content for Holocron starter docs. The w
    - Run `npm run check` before committing doc changes. If you change dependencies, commit the updated root `package-lock.json`.
 
 6. Integration and boundaries
-   - This repo is documentation-first. Production runtime, rule engines, and API integrations live outside this repo (look for service repos in the workspace).
-   - When adding references to external APIs or runtime behavior, include links or pointers to the implementation repo and any relevant API examples.
+   - This repo is documentation only. The rules engine, workflow builder, API endpoints and CLI commands in `rules-and-workflows/` are illustrative starter content; no implementation repo exists. Keep the banner on `index.mdx` and the illustrative notes, and do not add unsourced performance figures (`tests/illustrative-content.test.mjs` flags common forms such as `3-5x faster` or `50% faster` unless the same line links to a source, but cannot catch every phrasing).
+   - If real APIs or runtime behavior are documented later, link to the implementation repo and remove the illustrative labels for that content.
 
 7. Agent-specific constraints
    - Keep edits atomic and focused: small doc updates or single example fixes are preferred.

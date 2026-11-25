@@ -15,10 +15,27 @@ test("index page carries the illustrative-content banner", () => {
   assert.match(body, /<Warning>[\s\S]*illustrative[\s\S]*<\/Warning>/i);
 });
 
-test("no unsourced speedup figures (e.g. '3-5x faster')", () => {
-  const speedup = /\b\d+(?:\.\d+)?\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*x\b/i;
+const num = String.raw`\d+(?:\.\d+)?(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?`;
+const speedupPatterns = [
+  // "3-5x", "10x", "2.5 times" as a multiplier
+  new RegExp(String.raw`\b${num}\s*(?:x|×|times)\b`, "i"),
+  // "50% faster", "30-40 % reduction"
+  new RegExp(String.raw`\b${num}\s*%\s*(?:faster|slower|quicker|speed|improvement|better|reduction|less|fewer|lower|higher|more)\b`, "i"),
+];
+const hasSpeedup = (line) => speedupPatterns.some((re) => re.test(line));
+
+test("speedup detector catches the forms it should", () => {
+  for (const s of ["3-5x faster", "10x faster", "1.5-2x improvement", "2.5 times quicker", "50% faster", "30-40 % reduction"]) {
+    assert.ok(hasSpeedup(s), s);
+  }
+  for (const s of ["value: 10000  # Filters 90% of orders", 'condition: "failure_rate > 10%"', "max_retries: 3"]) {
+    assert.ok(!hasSpeedup(s), s);
+  }
+});
+
+test("no unsourced performance figures (e.g. '3-5x faster', '50% faster')", () => {
   for (const f of pages) {
-    const hits = read(f).split("\n").filter((line) => speedup.test(line));
+    const hits = read(f).split("\n").filter(hasSpeedup);
     assert.deepEqual(hits, [], `${f} has speedup figures`);
   }
 });

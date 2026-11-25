@@ -16,19 +16,22 @@ test("index page carries the illustrative-content banner", () => {
 });
 
 const num = String.raw`\d+(?:\.\d+)?(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?`;
+const perfWord = String.raw`(?:faster|slower|quicker|speed(?:up)?|latency|throughput|performance|improve(?:d|ment)?|reduc(?:e|ed|es|tion)|overhead|better)`;
 const speedupPatterns = [
-  // "3-5x", "10x", "2.5 times" as a multiplier
-  new RegExp(String.raw`\b${num}\s*(?:x|×|times)\b`, "i"),
-  // "50% faster", "30-40 % reduction"
-  new RegExp(String.raw`\b${num}\s*%\s*(?:faster|slower|quicker|speed|improvement|better|reduction|less|fewer|lower|higher|more)\b`, "i"),
+  // "3-5x", "10x", "3×" as a multiplier
+  new RegExp(String.raw`\b${num}\s*(?:x|×)(?![a-z0-9_])`, "i"),
+  // "2.5 times quicker"
+  new RegExp(String.raw`\b${num}\s+times\s+${perfWord}`, "i"),
+  // a percentage on the same line as a performance word: "50% faster", "latency reduced by 50%"
+  new RegExp(String.raw`(?=.*\b${perfWord}).*\b${num}\s*%`, "i"),
 ];
 const hasSpeedup = (line) => speedupPatterns.some((re) => re.test(line));
 
 test("speedup detector catches the forms it should", () => {
-  for (const s of ["3-5x faster", "10x faster", "1.5-2x improvement", "2.5 times quicker", "50% faster", "30-40 % reduction"]) {
+  for (const s of ["3-5x faster", "10x faster", "3× faster", "1.5-2x improvement", "2.5 times quicker", "50% faster", "30-40 % reduction", "50% latency reduction", "latency reduced by 50%"]) {
     assert.ok(hasSpeedup(s), s);
   }
-  for (const s of ["value: 10000  # Filters 90% of orders", 'condition: "failure_rate > 10%"', "max_retries: 3"]) {
+  for (const s of ["value: 10000  # Filters 90% of orders", 'condition: "failure_rate > 10%"', "max_retries: 3", "retry the request 3 times", "0x1F", "avg_execution_time > 2x_baseline"]) {
     assert.ok(!hasSpeedup(s), s);
   }
 });

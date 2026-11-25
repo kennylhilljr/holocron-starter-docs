@@ -183,6 +183,37 @@ test("reference definitions, template-literal hrefs and parens in destinations",
   assert.deepEqual(checkDocs(good).errors, []);
 });
 
+test("multiline references, nested parens, multiline template hrefs and undefined references", () => {
+  const bad = fixture({
+    "a.mdx": page() +
+      "[guide][g]\n\n[g]:\n  /removed-page\n\n<Card\n  href={\n    `/also-removed`\n  }\n/> and `code`\n" +
+      "<Card href={`/third`} /> then `x`\n[dangling][missing] [Collapsed][]\n",
+  });
+  const errors = checkDocs(bad).errors;
+  assert.deepEqual(errors, [
+    'a.mdx:10: broken link "/removed-page"',
+    'a.mdx:14: broken link "/also-removed"',
+    'a.mdx:18: broken link "/third"',
+    'a.mdx:19: undefined link reference "missing"',
+    'a.mdx:19: undefined link reference "collapsed"',
+  ]);
+  const good = fixture({
+    "a.mdx": page() + "[p](/docs/a_(b_(c_(old))).mdx) [r][G]\n\n[g]: /docs/a_(b_(c_(old)))\n",
+    "docs/a_(b_(c_(old))).mdx": page(),
+  });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
+test("commented-out links and an unmatched backtick are handled", () => {
+  const ok = fixture({
+    "a.mdx": page() + '{/* <Card href="/removed" /> */}\n{/*\n[x](/gone)\n*/}\n<!-- [y](/gone) -->\n',
+    "holocron.jsonc": '{\n  // old favicon: "/removed.svg"\n  /* "/also-removed.svg" */\n  "url": "https://x.y/a"\n}\n',
+  });
+  assert.deepEqual(checkDocs(ok).errors, []);
+  const bad = fixture({ "a.mdx": page() + "a stray ` backtick\n\n[x](/gone)\n\nlater ` one\n" });
+  assert.deepEqual(checkDocs(bad).errors, ['a.mdx:10: broken link "/gone"']);
+});
+
 test("links escaping the repository are reported", () => {
   const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
   assert.match(checkDocs(dir).errors.join("\n"), /broken link/);

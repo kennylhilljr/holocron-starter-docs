@@ -79,12 +79,17 @@ export function parseFrontmatter(text) {
 const isSkippedPageEntry = (page) =>
   page === "..." || page === "z...a" || /^---.*---$/.test(page) || /^\[.*\]\(.*\)$/.test(page);
 
-// Strip fenced code blocks and inline code so example snippets are not
-// treated as links. Line count is preserved so reported lines stay accurate.
+// Blank out a match but keep its line breaks, so reported lines stay accurate.
+const blank = (s) => s.replace(/[^\n]/g, "");
+
+// Strip front matter, fenced code blocks, MDX/HTML comments and inline code
+// so examples and commented-out markup are not treated as links. Static
+// template literals in JSX attributes (href={`/x`}) are rewritten to plain
+// strings first so code-span stripping cannot swallow them.
 export function stripCode(text) {
   const lines = text.split(/\r?\n/);
   let fence = null;
-  return lines
+  const unfenced = lines
     .map((line) => {
       const open = line.match(/^\s{0,3}(`{3,}|~{3,})/);
       if (fence) {
@@ -96,30 +101,56 @@ export function stripCode(text) {
         fence = open[1];
         return "";
       }
-      // Keep static template literals in JSX attributes (href={`/x`}).
-      return line.replace(/(?<!=\s*\{\s*)(`+)[\s\S]*?\1/g, "");
+      return line;
     })
     .join("\n");
+  return unfenced
+    .replace(/^---\n[\s\S]*?\n---(?=\n|$)/, blank)
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, blank)
+    .replace(/<!--[\s\S]*?-->/g, blank)
+    .replace(/\b(href|src)(\s*=\s*)\{\s*`([^`$\n]*)`\s*\}/g, (m, attr, eq, value) => `${attr}${eq}"${value}"` + blank(m))
+    // Code spans never cross a blank line (paragraph break).
+    .replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, blank);
 }
 
-// Internal link targets in MDX: markdown links/images, reference definitions and JSX href/src
-// attributes. External URLs (scheme:, //host), pure anchors and expressions
-// ({...}) are ignored.
+// Destination with up to three levels of balanced parentheses.
+const P0 = String.raw`[^()\s]`;
+const P1 = String.raw`\((?:${P0})*\)`;
+const P2 = String.raw`\((?:${P0}|${P1})*\)`;
+const P3 = String.raw`\((?:${P0}|${P1}|${P2})*\)`;
+const DEST = String.raw`(?:${P0}|${P1}|${P2}|${P3})+`;
+const INLINE_LINK = new RegExp(String.raw`!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|${DEST})(?:\s+["'(][^)]*)?\)`, "g");
+// [label]: target, with the target allowed on the next line.
+const REF_DEF = /^ {0,3}\[([^\]\n]+)\]:[ \t]*\n?[ \t]*(<[^>\n]*>|\S+)/gm;
+// Full and collapsed reference links: [text][label], [label][].
+const REF_USE = /(?<![\]\\])!?\[([^\]\n]*)\]\[([^\]\n]*)\]/g;
+const JSX_ATTR = /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)')\s*\})/g;
+const normLabel = (l) => l.trim().replace(/\s+/g, " ").toLowerCase();
+
+// Internal link targets in MDX: markdown links/images, reference definitions
+// and JSX href/src attributes. External URLs (scheme:, //host), pure anchors
+// and dynamic expressions are ignored. Reference links whose label has no
+// definition are returned with { undefinedRef: label }.
 export function extractLinks(text) {
-  const body = stripCode(text);
+  const body = stripCode(text.replace(/\r\n?/g, "\n"));
+  const lineOf = (index) => body.slice(0, index).split("\n").length;
   const links = [];
   const add = (target, index) => {
     const t = target.trim().replace(/^<(.*)>$/, "$1");
     if (!t || t.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(t) || t.startsWith("//")) return;
-    links.push({ target: t, index, line: body.slice(0, index).split("\n").length });
+    links.push({ target: t, index, line: lineOf(index) });
   };
-  // Inline links; the destination may contain one level of balanced parens.
-  for (const m of body.matchAll(/!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))+)(?:\s+["'(][^)]*)?\)/g)) add(m[1], m.index);
-  // Reference definitions: [label]: target
-  for (const m of body.matchAll(/^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/gm)) add(m[1], m.index);
-  for (const m of body.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)\s*\})/g)) {
-    add(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5], m.index);
+  for (const m of body.matchAll(INLINE_LINK)) add(m[1], m.index);
+  const defined = new Set();
+  for (const m of body.matchAll(REF_DEF)) {
+    defined.add(normLabel(m[1]));
+    add(m[2], m.index);
   }
+  for (const m of body.matchAll(REF_USE)) {
+    const label = normLabel(m[2] || m[1]);
+    if (label && !defined.has(label)) links.push({ undefinedRef: label, index: m.index, line: lineOf(m.index) });
+  }
+  for (const m of body.matchAll(JSX_ATTR)) add(m[1] ?? m[2] ?? m[3] ?? m[4], m.index);
   return links.sort((a, b) => a.index - b.index);
 }
 
@@ -143,10 +174,12 @@ export function linkResolves(root, fromDir, target) {
   return candidates.some(isFile);
 }
 
-// Root-relative string values ("/favicon.svg") in holocron.jsonc.
+// Root-relative string values ("/favicon.svg") in holocron.jsonc. Strings
+// inside // and /* */ comments are ignored.
 export function configPaths(text) {
   const paths = [];
-  for (const m of text.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+  for (const m of text.matchAll(/"((?:[^"\\\n]|\\.)*)"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g)) {
+    if (m[1] === undefined) continue;
     const v = m[1];
     if (v.startsWith("/") && !v.startsWith("//")) paths.push({ target: v, line: text.slice(0, m.index).split("\n").length });
   }
@@ -180,8 +213,9 @@ export function checkDocs(rootDir) {
   }
 
   for (const file of mdxFiles) {
-    for (const { target, line } of extractLinks(readFileSync(file, "utf8"))) {
-      if (!linkResolves(root, dirname(file), target)) errors.push(`${rel(file)}:${line}: broken link ${JSON.stringify(target)}`);
+    for (const { target, undefinedRef, line } of extractLinks(readFileSync(file, "utf8"))) {
+      if (undefinedRef !== undefined) errors.push(`${rel(file)}:${line}: undefined link reference ${JSON.stringify(undefinedRef)}`);
+      else if (!linkResolves(root, dirname(file), target)) errors.push(`${rel(file)}:${line}: broken link ${JSON.stringify(target)}`);
     }
   }
 

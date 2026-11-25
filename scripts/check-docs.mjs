@@ -119,11 +119,16 @@ const P1 = String.raw`\((?:${P0})*\)`;
 const P2 = String.raw`\((?:${P0}|${P1})*\)`;
 const P3 = String.raw`\((?:${P0}|${P1}|${P2})*\)`;
 const DEST = String.raw`(?:${P0}|${P1}|${P2}|${P3})+`;
-const INLINE_LINK = new RegExp(String.raw`!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|${DEST})(?:\s+["'(][^)]*)?\)`, "g");
-// [label]: target, with the target allowed on the next line.
-const REF_DEF = /^ {0,3}\[([^\]\n]+)\]:[ \t]*\n?[ \t]*(<[^>\n]*>|\S+)/gm;
+// Link text may wrap onto following lines (not across a blank line) and may
+// contain one level of nested brackets, e.g. a badge image inside a link.
+const LABEL_CHAR = String.raw`(?:[^\[\]\n]|\n(?![ \t]*\n))`;
+const LABEL = String.raw`(?:${LABEL_CHAR}|\[${LABEL_CHAR}*\])*`;
+const INLINE_LINK = new RegExp(String.raw`!?\[(${LABEL})\]\(\s*(<[^>\n]*>|${DEST})(?:\s+["'(][^)]*)?\)`, "g");
+// [label]: target, with the target allowed on the next line. Footnote
+// definitions ([^1]: text) are not links.
+const REF_DEF = /^ {0,3}\[(?!\^)([^\]\n]+)\]:[ \t]*\n?[ \t]*(<[^>\n]*>|\S+)/gm;
 // Full and collapsed reference links: [text][label], [label][].
-const REF_USE = /(?<![\]\\])!?\[([^\]\n]*)\]\[([^\]\n]*)\]/g;
+const REF_USE = new RegExp(String.raw`(?<![\]\\])!?\[(${LABEL})\]\[([^\]\n]*)\]`, "g");
 const JSX_ATTR = /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)')\s*\})/g;
 const normLabel = (l) => l.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -140,13 +145,26 @@ export function extractLinks(text) {
     if (!t || t.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(t) || t.startsWith("//")) return;
     links.push({ target: t, index, line: lineOf(index) });
   };
-  for (const m of body.matchAll(INLINE_LINK)) add(m[1], m.index);
+  // Scan link text too, so a link wrapping an image checks both targets.
+  const scanInline = (text, offset) => {
+    for (const m of text.matchAll(INLINE_LINK)) {
+      add(m[2], offset + m.index);
+      scanInline(m[1], offset + m.index + m[0].indexOf("[") + 1);
+    }
+  };
+  scanInline(body, 0);
   const defined = new Set();
   for (const m of body.matchAll(REF_DEF)) {
     defined.add(normLabel(m[1]));
     add(m[2], m.index);
   }
-  for (const m of body.matchAll(REF_USE)) {
+  // MDX expressions such as {rows[i][j]} are not reference links.
+  let prose = body;
+  for (let prev; prev !== prose; ) {
+    prev = prose;
+    prose = prose.replace(/\{[^{}]*\}/g, blank);
+  }
+  for (const m of prose.matchAll(REF_USE)) {
     const label = normLabel(m[2] || m[1]);
     if (label && !defined.has(label)) links.push({ undefinedRef: label, index: m.index, line: lineOf(m.index) });
   }

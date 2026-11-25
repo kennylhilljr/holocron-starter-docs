@@ -214,6 +214,21 @@ test("commented-out links and an unmatched backtick are handled", () => {
   assert.deepEqual(checkDocs(bad).errors, ['a.mdx:10: broken link "/gone"']);
 });
 
+test("MDX expressions and footnotes are not links; nested and wrapped labels are checked", () => {
+  const ok = fixture({
+    "a.mdx": page() + "Value {matrix[row][column]} and {f({a: x[0][1]})}.\n\nSee note[^1].\n\n[^1]: This is a note\n",
+  });
+  assert.deepEqual(checkDocs(ok).errors, []);
+  const bad = fixture({
+    "a.mdx": page() + "[![Status](/badge.svg)](/removed-page)\n\n[Read the full\nguide](/wrapped-gone)\n",
+  });
+  assert.deepEqual(checkDocs(bad).errors, [
+    'a.mdx:8: broken link "/removed-page"',
+    'a.mdx:8: broken link "/badge.svg"',
+    'a.mdx:10: broken link "/wrapped-gone"',
+  ]);
+});
+
 test("links escaping the repository are reported", () => {
   const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
   assert.match(checkDocs(dir).errors.join("\n"), /broken link/);

@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -138,5 +138,51 @@ test(".gitignore ignores build output only at the root", { skip: !hasGitWorktree
   }
   for (const p of ["guides/build/p.mdx", "guides/dist/p.mdx", "guides/out/p.mdx"]) {
     assert.ok(!ignored(p), `${p} should not be ignored`);
+  }
+});
+
+test("broken internal links in .mdx are reported", () => {
+  const dir = fixture({
+    "docs/a.mdx": page("'T'", "") +
+      '<Card href="/docs/gone">x</Card>\n[md](/docs/renamed)\n[rel](./nope)\n![img](/img/missing.png)\n<Card href={"/docs/also-gone"}>y</Card>\n',
+  });
+  const { errors } = checkDocs(dir);
+  assert.equal(errors.length, 5, errors.join("\n"));
+  for (const t of ["/docs/gone", "/docs/renamed", "./nope", "/img/missing.png", "/docs/also-gone"]) {
+    assert.match(errors.join("\n"), new RegExp(`broken link "${t.replace(/[./]/g, "\\$&")}"`));
+  }
+  assert.match(errors[0], /^docs\/a\.mdx:8: broken link "\/docs\/gone"/);
+});
+
+test("valid internal links, external links and links in code pass", () => {
+  const dir = fixture({
+    "docs/a.mdx": page() +
+      '<Card href="/docs/b#section">x</Card>\n[b](./b) [b2](b.mdx) [sub](/docs/sub) [root](/) [anchor](#top)\n' +
+      "[ext](https://example.com/x) [mail](mailto:a@b.c) [proto](//cdn.example.com/x)\n" +
+      "![logo](/logo.svg) ![pub](/pub.png) [q](/docs/b?x=1)\n" +
+      "`[inline](/nope)`\n```md\n[fenced](/nope)\n<a href=\"/nope\">\n```\n~~~~\n[tilde](/nope)\n~~~\nstill fenced](/nope)\n~~~~\n",
+    "docs/b.mdx": page(),
+    "docs/sub/index.mdx": page(),
+    "logo.svg": "<svg/>",
+    "public/pub.png": "x",
+  });
+  assert.deepEqual(checkDocs(dir).errors, []);
+});
+
+test("links escaping the repository are reported", () => {
+  const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
+  assert.match(checkDocs(dir).errors.join("\n"), /broken link/);
+});
+
+test("missing root-relative paths in holocron.jsonc are reported", () => {
+  const bad = fixture({ "a.mdx": page(), "holocron.jsonc": '{\n  "favicon": { "light": "/favicon.svg" },\n  "logo": "https://x.y/l.svg"\n}\n' });
+  assert.deepEqual(checkDocs(bad).errors, ['holocron.jsonc:2: path "/favicon.svg" does not exist']);
+  const good = fixture({ "a.mdx": page(), "favicon.svg": "<svg/>", "holocron.jsonc": '{ "favicon": { "light": "/favicon.svg" } }' });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
+test("orphaned files from the starter are gone", () => {
+  for (const f of ["dB_requirements.md", "requirements_management.png"]) {
+    assert.ok(!existsSync(join(repoRoot, f)), `${f} should not exist`);
   }
 });

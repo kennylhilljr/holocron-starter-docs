@@ -4,6 +4,10 @@
 //   1. Every .mdx file has frontmatter with non-empty title, description and icon.
 //   2. Every page listed in a meta.json "pages" array resolves to <page>.mdx
 //      or to a <page>/ folder next to that meta.json.
+//   3. Every internal link in an .mdx file (markdown links and JSX href/src
+//      attributes, outside code) and every root-relative path in
+//      holocron.jsonc resolves to a page (<path>.mdx or <path>/index.mdx) or
+//      to a file in the repository (or public/).
 // Usage: node scripts/check-docs.mjs [rootDir]   (default: repository root)
 
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
@@ -75,6 +79,76 @@ export function parseFrontmatter(text) {
 const isSkippedPageEntry = (page) =>
   page === "..." || page === "z...a" || /^---.*---$/.test(page) || /^\[.*\]\(.*\)$/.test(page);
 
+// Strip fenced code blocks and inline code so example snippets are not
+// treated as links. Line count is preserved so reported lines stay accurate.
+export function stripCode(text) {
+  const lines = text.split(/\r?\n/);
+  let fence = null;
+  return lines
+    .map((line) => {
+      const open = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (fence) {
+        const close = line.match(/^\s{0,3}(`{3,}|~{3,})\s*$/);
+        if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
+        return "";
+      }
+      if (open) {
+        fence = open[1];
+        return "";
+      }
+      return line.replace(/(`+)[\s\S]*?\1/g, "");
+    })
+    .join("\n");
+}
+
+// Internal link targets in MDX: markdown links/images and JSX href/src
+// attributes. External URLs (scheme:, //host), pure anchors and expressions
+// ({...}) are ignored.
+export function extractLinks(text) {
+  const body = stripCode(text);
+  const links = [];
+  const add = (target, index) => {
+    const t = target.trim().replace(/^<(.*)>$/, "$1");
+    if (!t || t.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(t) || t.startsWith("//")) return;
+    links.push({ target: t, index, line: body.slice(0, index).split("\n").length });
+  };
+  for (const m of body.matchAll(/!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+["'(][^)]*)?\)/g)) add(m[1], m.index);
+  for (const m of body.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)\s*\})/g)) {
+    add(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5], m.index);
+  }
+  return links.sort((a, b) => a.index - b.index);
+}
+
+// Resolve an internal link to a page or file. Root-relative links resolve
+// against the repository root, others against the linking file's folder.
+export function linkResolves(root, fromDir, target) {
+  let path = target.replace(/[?#].*$/, "");
+  if (path === "") return true;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    return false;
+  }
+  const base = path.startsWith("/") ? root : fromDir;
+  const abs = resolve(base, "." + (path.startsWith("/") ? path : "/" + path));
+  if (abs !== root && !abs.startsWith(root + sep)) return false;
+  if (abs === root) return true;
+  const isFile = (p) => existsSync(p) && statSync(p).isFile();
+  const candidates = [abs.replace(/\/$/, "") + ".mdx", join(abs, "index.mdx"), abs];
+  if (path.startsWith("/")) candidates.push(resolve(root, "public", "." + path));
+  return candidates.some(isFile);
+}
+
+// Root-relative string values ("/favicon.svg") in holocron.jsonc.
+export function configPaths(text) {
+  const paths = [];
+  for (const m of text.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+    const v = m[1];
+    if (v.startsWith("/") && !v.startsWith("//")) paths.push({ target: v, line: text.slice(0, m.index).split("\n").length });
+  }
+  return paths;
+}
+
 export function checkDocs(rootDir) {
   const root = resolve(rootDir);
   const errors = [];
@@ -98,6 +172,19 @@ export function checkDocs(rootDir) {
       } else if (!fm[field]?.value) {
         errors.push(`${rel(file)}: missing frontmatter field ${field}`);
       }
+    }
+  }
+
+  for (const file of mdxFiles) {
+    for (const { target, line } of extractLinks(readFileSync(file, "utf8"))) {
+      if (!linkResolves(root, dirname(file), target)) errors.push(`${rel(file)}:${line}: broken link ${JSON.stringify(target)}`);
+    }
+  }
+
+  const config = join(root, "holocron.jsonc");
+  if (existsSync(config)) {
+    for (const { target, line } of configPaths(readFileSync(config, "utf8"))) {
+      if (!linkResolves(root, root, target)) errors.push(`holocron.jsonc:${line}: path ${JSON.stringify(target)} does not exist`);
     }
   }
 

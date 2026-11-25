@@ -9,28 +9,31 @@
       {
         "items": [
           {
-            "href": "https://holocron.so",
-            "label": "Holocron"
+            "href": "/rules-and-workflows",
+            "label": "Rules and Workflows"
+          },
+          {
+            "href": "https://github.com/kennylhilljr/holocron-starter-docs",
+            "label": "Source on GitHub"
           }
         ],
         "header": "Documentation"
       }
     ],
     "socials": {
-      "github": "https://github.com/remorses",
-      "twitter": "https://x.com/__morse"
+      "github": "https://github.com/kennylhilljr/holocron-starter-docs"
     }
   },
   "navbar": {
     "links": [
       {
-        "href": "https://holocron.so",
+        "href": "/rules-and-workflows",
         "icon": "document",
-        "label": "Home"
+        "label": "Docs"
       }
     ],
     "primary": {
-      "href": "https://holocron.so/login",
+      "href": "/rules-and-workflows",
       "type": "button",
       "label": "Get Started"
     }

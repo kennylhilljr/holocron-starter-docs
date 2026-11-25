@@ -96,12 +96,13 @@ export function stripCode(text) {
         fence = open[1];
         return "";
       }
-      return line.replace(/(`+)[\s\S]*?\1/g, "");
+      // Keep static template literals in JSX attributes (href={`/x`}).
+      return line.replace(/(?<!=\s*\{\s*)(`+)[\s\S]*?\1/g, "");
     })
     .join("\n");
 }
 
-// Internal link targets in MDX: markdown links/images and JSX href/src
+// Internal link targets in MDX: markdown links/images, reference definitions and JSX href/src
 // attributes. External URLs (scheme:, //host), pure anchors and expressions
 // ({...}) are ignored.
 export function extractLinks(text) {
@@ -112,7 +113,10 @@ export function extractLinks(text) {
     if (!t || t.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(t) || t.startsWith("//")) return;
     links.push({ target: t, index, line: body.slice(0, index).split("\n").length });
   };
-  for (const m of body.matchAll(/!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+["'(][^)]*)?\)/g)) add(m[1], m.index);
+  // Inline links; the destination may contain one level of balanced parens.
+  for (const m of body.matchAll(/!?\[[^\]\n]*\]\(\s*(<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))+)(?:\s+["'(][^)]*)?\)/g)) add(m[1], m.index);
+  // Reference definitions: [label]: target
+  for (const m of body.matchAll(/^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/gm)) add(m[1], m.index);
   for (const m of body.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)\s*\})/g)) {
     add(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5], m.index);
   }

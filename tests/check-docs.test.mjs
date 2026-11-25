@@ -169,6 +169,20 @@ test("valid internal links, external links and links in code pass", () => {
   assert.deepEqual(checkDocs(dir).errors, []);
 });
 
+test("reference definitions, template-literal hrefs and parens in destinations", () => {
+  const bad = fixture({
+    "a.mdx": page() + "[guide][g]\n\n[g]: /removed-page\n<Card href={`/also-removed`}>x</Card>\n",
+  });
+  const errors = checkDocs(bad).errors.join("\n");
+  assert.match(errors, /broken link "\/removed-page"/);
+  assert.match(errors, /broken link "\/also-removed"/);
+  const good = fixture({
+    "a.mdx": page() + "[p](/docs/a_(old).mdx) [r][g]\n\n[g]: /docs/a_(old) \"Title\"\n<Card href={`/docs/a_(old)`}>x</Card>\n",
+    "docs/a_(old).mdx": page(),
+  });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
 test("links escaping the repository are reported", () => {
   const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
   assert.match(checkDocs(dir).errors.join("\n"), /broken link/);

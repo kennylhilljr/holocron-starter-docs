@@ -479,6 +479,10 @@ steps:
 <Accordion title="Workflow Testing">
 Test workflows before deployment:
 
+<Info>
+The test endpoint below is an illustrative example. This repository ships no API or CLI for it.
+</Info>
+
 ```bash
 # Test workflow with sample data
 POST /api/workflows/{workflow_id}/test
@@ -521,14 +525,16 @@ Track workflow execution in real-time:
 
 ### Performance Optimization
 
-| Optimization Technique | Performance Impact | Implementation Complexity | Resource Usage | Best Use Cases | Trade-offs |
+| Optimization Technique | Expected Effect | Implementation Complexity | Resource Usage | Best Use Cases | Trade-offs |
 |------------------------|-------------------|---------------------------|----------------|----------------|------------|
-| **Parallel Execution** | 3-5x faster | Medium | Higher concurrent load | Independent tasks | Increased complexity |
-| **Batch Processing** | 2-3x faster | Low | Lower API calls | Bulk operations | Higher memory usage |
-| **Caching** | 5-10x faster | Low | Lower data fetching | Frequent access patterns | Stale data risk |
-| **Conditional Logic** | 1.5-2x faster | Low | Reduced processing | Variable workflows | Code complexity |
-| **Async Processing** | 2-4x faster | High | Better resource utilization | Long-running tasks | Debugging complexity |
-| **Connection Pooling** | 2-3x faster | Medium | Lower connection overhead | Database/API heavy workflows | Configuration complexity |
+| **Parallel Execution** | Shorter wall-clock time for independent steps | Medium | Higher concurrent load | Independent tasks | Increased complexity |
+| **Batch Processing** | Lower per-item overhead | Low | Lower API calls | Bulk operations | Higher memory usage |
+| **Caching** | Fewer repeated data fetches | Low | Lower data fetching | Frequent access patterns | Stale data risk |
+| **Conditional Logic** | Skips steps that do not apply | Low | Reduced processing | Variable workflows | Code complexity |
+| **Async Processing** | Long steps no longer block the workflow | High | Better resource utilization | Long-running tasks | Debugging complexity |
+| **Connection Pooling** | Less connection setup overhead | Medium | Lower connection overhead | Database/API heavy workflows | Configuration complexity |
+
+These effects are qualitative and depend on your workload. Measure before and after any change.
 
 <Info>
 **Optimization Tips:**

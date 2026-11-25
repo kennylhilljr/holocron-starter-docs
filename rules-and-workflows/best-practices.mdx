@@ -347,16 +347,18 @@ steps:
 </Accordion>
 </AccordionGroup>
 
-| Optimization Strategy | When to Use | Performance Gain | Implementation Effort | Risk Level | Monitoring Required |
+| Optimization Strategy | When to Use | Expected Effect | Implementation Effort | Risk Level | Monitoring Required |
 |----------------------|-------------|------------------|----------------------|------------|-------------------|
-| **Condition Ordering** | High-volume rules | 2-3x improvement | Low | None | Execution time |
-| **Parallel Execution** | Independent tasks | 3-5x improvement | Medium | Medium | Resource usage |
-| **Caching** | Frequent data access | 5-10x improvement | Low | Low | Cache hit rate |
-| **Batch Processing** | Bulk operations | 2-4x improvement | Medium | Low | Memory usage |
-| **Index Optimization** | Database queries | 10-50x improvement | High | Low | Query performance |
-| **Async Processing** | Long-running tasks | 2-3x improvement | High | High | Queue depth |
-| **Connection Pooling** | External APIs | 2-3x improvement | Medium | Low | Connection usage |
-| **Data Archiving** | Historical data | 5-20x improvement | Medium | Medium | Storage usage |
+| **Condition Ordering** | High-volume rules | Fewer conditions evaluated per event | Low | None | Execution time |
+| **Parallel Execution** | Independent tasks | Shorter wall-clock time for independent tasks | Medium | Medium | Resource usage |
+| **Caching** | Frequent data access | Fewer repeated lookups | Low | Low | Cache hit rate |
+| **Batch Processing** | Bulk operations | Lower per-item overhead | Medium | Low | Memory usage |
+| **Index Optimization** | Database queries | Faster lookups on large tables | High | Low | Query performance |
+| **Async Processing** | Long-running tasks | Callers no longer wait on slow tasks | High | High | Queue depth |
+| **Connection Pooling** | External APIs | Less connection setup overhead | Medium | Low | Connection usage |
+| **Data Archiving** | Historical data | Smaller working data set | Medium | Medium | Storage usage |
+
+These effects are qualitative and depend on your workload. Measure before and after any change.
 
 <Steps>
 <Step title="Minimize External Calls">
@@ -459,6 +461,10 @@ steps:
 ## Testing and Monitoring
 
 ### Testing Strategies
+
+<Info>
+Each command below (`test-rule`, `run-workflow-test`) is an illustrative example. This repository ships no API or CLI for it.
+</Info>
 
 <CardGroup cols={2}>
 <Card title="Unit Testing" icon="test-tube">

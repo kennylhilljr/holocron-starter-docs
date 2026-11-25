@@ -44,9 +44,5 @@
     "holocron-starter-5ad2wyc6.holocronsites.com",
     "holocron-starter-docs-c0by737i.holocronsites.com"
   ],
-  "favicon": {
-    "dark": "/favicon.svg",
-    "light": "/favicon.svg"
-  },
   "disableEditButton": false
 }

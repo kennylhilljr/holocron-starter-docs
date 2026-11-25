@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -138,5 +138,118 @@ test(".gitignore ignores build output only at the root", { skip: !hasGitWorktree
   }
   for (const p of ["guides/build/p.mdx", "guides/dist/p.mdx", "guides/out/p.mdx"]) {
     assert.ok(!ignored(p), `${p} should not be ignored`);
+  }
+});
+
+test("broken internal links in .mdx are reported", () => {
+  const dir = fixture({
+    "docs/a.mdx": page("'T'", "") +
+      '<Card href="/docs/gone">x</Card>\n[md](/docs/renamed)\n[rel](./nope)\n![img](/img/missing.png)\n<Card href={"/docs/also-gone"}>y</Card>\n',
+  });
+  const { errors } = checkDocs(dir);
+  assert.equal(errors.length, 5, errors.join("\n"));
+  for (const t of ["/docs/gone", "/docs/renamed", "./nope", "/img/missing.png", "/docs/also-gone"]) {
+    assert.match(errors.join("\n"), new RegExp(`broken link "${t.replace(/[./]/g, "\\$&")}"`));
+  }
+  assert.match(errors[0], /^docs\/a\.mdx:8: broken link "\/docs\/gone"/);
+});
+
+test("valid internal links, external links and links in code pass", () => {
+  const dir = fixture({
+    "docs/a.mdx": page() +
+      '<Card href="/docs/b#section">x</Card>\n[b](./b) [b2](b.mdx) [sub](/docs/sub) [root](/) [anchor](#top)\n' +
+      "[ext](https://example.com/x) [mail](mailto:a@b.c) [proto](//cdn.example.com/x)\n" +
+      "![logo](/logo.svg) ![pub](/pub.png) [q](/docs/b?x=1)\n" +
+      "`[inline](/nope)`\n```md\n[fenced](/nope)\n<a href=\"/nope\">\n```\n~~~~\n[tilde](/nope)\n~~~\nstill fenced](/nope)\n~~~~\n",
+    "docs/b.mdx": page(),
+    "docs/sub/index.mdx": page(),
+    "logo.svg": "<svg/>",
+    "public/pub.png": "x",
+  });
+  assert.deepEqual(checkDocs(dir).errors, []);
+});
+
+test("reference definitions, template-literal hrefs and parens in destinations", () => {
+  const bad = fixture({
+    "a.mdx": page() + "[guide][g]\n\n[g]: /removed-page\n<Card href={`/also-removed`}>x</Card>\n",
+  });
+  const errors = checkDocs(bad).errors.join("\n");
+  assert.match(errors, /broken link "\/removed-page"/);
+  assert.match(errors, /broken link "\/also-removed"/);
+  const good = fixture({
+    "a.mdx": page() + "[p](/docs/a_(old).mdx) [r][g]\n\n[g]: /docs/a_(old) \"Title\"\n<Card href={`/docs/a_(old)`}>x</Card>\n",
+    "docs/a_(old).mdx": page(),
+  });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
+test("multiline references, nested parens, multiline template hrefs and undefined references", () => {
+  const bad = fixture({
+    "a.mdx": page() +
+      "[guide][g]\n\n[g]:\n  /removed-page\n\n<Card\n  href={\n    `/also-removed`\n  }\n/> and `code`\n" +
+      "<Card href={`/third`} /> then `x`\n[dangling][missing] [Collapsed][]\n",
+  });
+  const errors = checkDocs(bad).errors;
+  assert.deepEqual(errors, [
+    'a.mdx:10: broken link "/removed-page"',
+    'a.mdx:14: broken link "/also-removed"',
+    'a.mdx:18: broken link "/third"',
+    'a.mdx:19: undefined link reference "missing"',
+    'a.mdx:19: undefined link reference "collapsed"',
+  ]);
+  const good = fixture({
+    "a.mdx": page() + "[p](/docs/a_(b_(c_(old))).mdx) [r][G]\n\n[g]: /docs/a_(b_(c_(old)))\n",
+    "docs/a_(b_(c_(old))).mdx": page(),
+  });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
+test("commented-out links and an unmatched backtick are handled", () => {
+  const ok = fixture({
+    "a.mdx": page() + '{/* <Card href="/removed" /> */}\n{/*\n[x](/gone)\n*/}\n<!-- [y](/gone) -->\n',
+    "holocron.jsonc": '{\n  // old favicon: "/removed.svg"\n  /* "/also-removed.svg" */\n  "url": "https://x.y/a"\n}\n',
+  });
+  assert.deepEqual(checkDocs(ok).errors, []);
+  const bad = fixture({ "a.mdx": page() + "a stray ` backtick\n\n[x](/gone)\n\nlater ` one\n" });
+  assert.deepEqual(checkDocs(bad).errors, ['a.mdx:10: broken link "/gone"']);
+});
+
+test("MDX expressions and footnotes are not links; nested and wrapped labels are checked", () => {
+  const ok = fixture({
+    "a.mdx": page() + "Value {matrix[row][column]} and {f({a: x[0][1]})}.\n\nSee note[^1].\n\n[^1]: This is a note\n",
+  });
+  assert.deepEqual(checkDocs(ok).errors, []);
+  const bad = fixture({
+    "a.mdx": page() + "[![Status](/badge.svg)](/removed-page)\n\n[Read the full\nguide](/wrapped-gone)\n",
+  });
+  assert.deepEqual(checkDocs(bad).errors, [
+    'a.mdx:8: broken link "/removed-page"',
+    'a.mdx:8: broken link "/badge.svg"',
+    'a.mdx:10: broken link "/wrapped-gone"',
+  ]);
+});
+
+test("references nested in reference labels are checked", () => {
+  const dir = fixture({
+    "a.mdx": page() + "{x}\n{\n  y\n}\n[![CI][missing]][project]\n\n[project]: /a\n",
+  });
+  assert.deepEqual(checkDocs(dir).errors, ['a.mdx:12: undefined link reference "missing"']);
+});
+
+test("links escaping the repository are reported", () => {
+  const dir = fixture({ "a.mdx": page() + "[up](../../etc/passwd)\n" });
+  assert.match(checkDocs(dir).errors.join("\n"), /broken link/);
+});
+
+test("missing root-relative paths in holocron.jsonc are reported", () => {
+  const bad = fixture({ "a.mdx": page(), "holocron.jsonc": '{\n  "favicon": { "light": "/favicon.svg" },\n  "logo": "https://x.y/l.svg"\n}\n' });
+  assert.deepEqual(checkDocs(bad).errors, ['holocron.jsonc:2: path "/favicon.svg" does not exist']);
+  const good = fixture({ "a.mdx": page(), "favicon.svg": "<svg/>", "holocron.jsonc": '{ "favicon": { "light": "/favicon.svg" } }' });
+  assert.deepEqual(checkDocs(good).errors, []);
+});
+
+test("orphaned files from the starter are gone", () => {
+  for (const f of ["dB_requirements.md", "requirements_management.png"]) {
+    assert.ok(!existsSync(join(repoRoot, f)), `${f} should not exist`);
   }
 });

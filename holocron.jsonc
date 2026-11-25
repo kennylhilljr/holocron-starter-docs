@@ -3,7 +3,7 @@
     "dark": "https://holocron.so/logo/light.svg",
     "light": "https://holocron.so/logo/dark.svg"
   },
-  "name": "holocron-starter",
+  "name": "holocron-starter-docs",
   "footer": {
     "links": [
       {
@@ -38,7 +38,8 @@
   "siteId": "01KBTAY8DA7RMQ2E2S3E24P3EZ",
   "$schema": "https://holocron.so/holocron.json",
   "domains": [
-    "holocron-starter-5ad2wyc6.holocronsites.com"
+    "holocron-starter-5ad2wyc6.holocronsites.com",
+    "holocron-starter-docs-c0by737i.holocronsites.com"
   ],
   "favicon": {
     "dark": "/favicon.svg",

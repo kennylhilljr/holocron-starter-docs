@@ -12,7 +12,7 @@ const read = (f) => readFileSync(join(docsDir, f), "utf8");
 
 test("index page carries the illustrative-content banner", () => {
   const body = read("index.mdx");
-  assert.match(body, /<Warning>[\s\S]*illustrative[\s\S]*<\/Warning>/i);
+  assert.match(body, /<Warning>(?:(?!<\/Warning>)[\s\S])*illustrative(?:(?!<\/Warning>)[\s\S])*<\/Warning>/i);
 });
 
 const num = String.raw`\d+(?:\.\d+)?(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?`;
